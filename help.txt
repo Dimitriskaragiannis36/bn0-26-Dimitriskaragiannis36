@@ -1,0 +1,13 @@
+1) docker run --rm --privileged -it ethan42/clawdbot:latest bash 
+    (κατεβάζω το container)
+2) gcc clawdbot.c -o clawdbot
+    (για να κατασκεβάσω το binary)
+3)checksec --file=clawdbot
+    (ελέγχω προστασία στο binary)
+4) cat clawdbot.c
+5) grep -n printf clawdbot.c --> 208 και 209 γραμμή 
+6) grep -n argv clawdbot.c --> 208 γραμμή
+7) grep -n main clawdbot.c --> 195 γραμμή είσοδο με argc, argv
+8) %p για να μας εκτυπώσει pointer από την στοίβα για να δούμε που ξεκινάει το format string
+9) ./clawdbot "AAAA %p %p %p %p %p %p %p %p %p"
+    (εκτελώ το binary με το format string για να δω που είναι το pointer)
