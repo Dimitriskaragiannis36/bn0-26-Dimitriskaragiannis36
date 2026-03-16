@@ -68,7 +68,7 @@
 *(0x0804e044) = 0x08049c6d
 ....
 
-Το οποίο επιτυγχάνεται με την τεχνική **two-short-write** χρησιμοποιώντας `%hn`, που γράφει τον τρέχοντα αριθμό εκτυπωμένων χαρακτήρων (mod 65536) στη διεύθυνση που δείχνει το αντίστοιχο argument. Διαιρούμε την τιμή `0x08049c6d` σε δύο 16-bit halves (`hi = 0x0804 = 2052`, `lo = 0x9c6d = 40045`) και υπολογίζουμε το απαραίτητο padding (`pad1 = 2027`, `pad2 = 37993`). Το padding προκύπτει ως εξής: αρχικά περιμένουμε να εκτυπώσουμε 2052 χαρακτήρες, όμως το μήνυμα (`  208      sprintf(message, "Prompt received: %s!\n", argv[1]);`) εκτυπώνει 17 χαρακτήρες (P=1, r=2, o=3, m=4, p=5, t=6, space=7, r=8, e=9, c=10, e=11, i=12, v=13, e=14, d=15, :=16, space=17) και μετά θα εκτυπωθούν οι 2 μισές διευθύνσεις (`hi = 0x0804 = 2052`, `lo = 0x9c6d = 40045`) άρα 4+4 = 8 bytes.  Συνεπώς, έχουμε 2052 - (17 + 8) = 2052 -25 = 2027 (`%2027c%`) και μαζί με το stack offset γίνεται `%2027c%{FMT_OFFSET}$hn`. Για το επόμενο padding θα είχαμε 40045, αλλά θα αφαιρέσουμε τα ήδη εκτυπωμένα 2052, οπότε θα έχουμε 37993 (`%37993c%`) και μαζί με το stack offset γίνεται `%37993c%{FMT_OFFSET + 1}$hn` καθώς θέλουμε να πάει στην επόμενη θέση μνήμης. Έτσι πρώτα θα γραφτεί στην μνήμη το 2052 και μετά το 40045, δηλαδή 2052_40045 ή 0x0804_0x9c6d ή 0x08049c6d που είναι η διεύθυνση της συνάρτησης `all_your_base_are_belong_to_us()` δηλαδή του shellcode `execl("/bin/sh", "sh", NULL);`. Με αυτόν τον τρόπο κάνουμε overwrite την διεύθυνση που δείχνει η συνάρτηση process και τρέχει το shellcode (που είναι ήδη στον κώδικα) και δίνει root. 
+Το οποίο επιτυγχάνεται με την τεχνική **two-short-write** χρησιμοποιώντας `%hn`, που γράφει τον τρέχοντα αριθμό εκτυπωμένων χαρακτήρων (mod 65536) στη διεύθυνση που δείχνει το αντίστοιχο argument. Διαιρούμε την τιμή `0x08049c6d` σε δύο 16-bit halves (`hi = 0x0804 = 2052`, `lo = 0x9c6d = 40045`) και υπολογίζουμε το απαραίτητο padding (`pad1 = 2027`, `pad2 = 37993`). Το padding προκύπτει ως εξής: αρχικά περιμένουμε να εκτυπώσουμε 2052 χαρακτήρες, όμως το μήνυμα (`  208      sprintf(message, "Prompt received: %s!\n", argv[1]);`) εκτυπώνει 17 χαρακτήρες (P=1, r=2, o=3, m=4, p=5, t=6, space=7, r=8, e=9, c=10, e=11, i=12, v=13, e=14, d=15, :=16, space=17) και μετά θα εκτυπωθούν οι 2 μισές διευθύνσεις (`hi = 0x0804 = 2052`, `lo = 0x9c6d = 40045`) άρα 4+4 = 8 bytes.  Συνεπώς, έχουμε 2052 - (17 + 8) = 2052 -25 = 2027 (`%2027c%`) και μαζί με το stack offset γίνεται `%2027c%{FMT_OFFSET}$hn`. Για το επόμενο padding θα είχαμε 40045, αλλά θα αφαιρέσουμε τα ήδη εκτυπωμένα 2052, οπότε θα έχουμε 37993 (`%37993c%`) και μαζί με το stack offset γίνεται `%37993c%{FMT_OFFSET + 1}$hn` καθώς θέλουμε να πάει στην επόμενη θέση μνήμης. Έτσι πρώτα θα γραφτεί στην μνήμη το 2052 και μετά το 40045, δηλαδή 2052_40045 ή 0x0804_0x9c6d ή 0x08049c6d που είναι η διεύθυνση της συνάρτησης `all_your_base_are_belong_to_us()` δηλαδή του shellcode `execl("/bin/sh", "sh", NULL);`. Με αυτόν τον τρόπο κάνουμε overwrite την διεύθυνση που δείχνει η συνάρτηση process και τρέχει το shellcode (που είναι ήδη στον κώδικα) και δίνει root. Παρακάτω θα δείτε πως τα καταφέραμε:
            
                 
                 
@@ -113,3 +113,108 @@ root
     | 0x08049c6d                       |  ← overwritten   --->  | 0x08049c6d                       |  
     | all_your_base_are_belong_to_us() |                        | execl("/bin/sh", "sh", NULL);    |
     ------------------------------------                        ------------------------------------
+
+
+
+Το bonus exploit ακολουθεί την ίδια λογική, με τη διαφορά ότι αντί να κάνουμε overwrite τον process pointer, παίρνουμε τον έλεγχο της free@GOT. Με `objdump -R /usr/sbin/clawdbot | grep free` βρίσκουμε ότι το free@GOT βρίσκεται στην διεύθυνση 0x0804e010. Αυτή η διεύθυνση είναι εγγράψιμη λόγω Partial RELRO και δείχνει αρχικά στη libc free(). Η ροή της main() μετά το printf είναι:
+....
+   211      process();
+   212      free(message);
+   213      return 0;
+....
+
+Ο στόχος είναι το overwrite:    *(0x0804e010) = 0x08049c6d
+Το padding υπολογίζεται με τον ίδιο τρόπο (pad1 = 2027, pad2 = 37993), απλά αλλάζει η διεύθυνση-στόχος από 0x0804e044 σε 0x0804e010. Έτσι, όταν η main() καλεί free(message), αντί να πάει στη libc, κοιτάει το GOT, βρίσκει 0x08049c6d και πηδά κατευθείαν στην all_your_base_are_belong_to_us() → execl("/bin/sh", "sh", NULL) → root shell. Το process pointer δεν αγγίχτηκε ποτέ — το animation τρέχει κανονικά και το shellcode εκτελείται "κρυφά" στο free(). Παρακάτω θα δείτε πως τα καταφέραμε:
+
+
+
+dimitris@DELLINDS:~/bn0-26-Dimitriskaragiannis36$ docker run --rm --privileged -v `pwd`/exploit.py:/exploit.py -it ethan42/clawdbot:latest bash
+bot@c39e57dd0e83:/workdir$ python3 /exploit.py bonus > /tmp/payload
+    clawdbot `cat /tmp/payload`
+Prompt received:                                                                                                                                       ... 
+[snip] 
+...                                                                                                                     S                                                                                                                                               ... 
+[snip] 
+...                                                                                                                                             �!
+... 
+[snip] 
+... 
+╭─────────────────────────────────────────────────────╮
+│  ClawdBot™ AI Agent  — Initializing Thought Matrix  │
+╰─────────────────────────────────────────────────────╯
+
+  Booting neural substrates.....
+  Loading 47 TB of vibes....
+  Aligning ethical guardrails (lol)......
+  Consulting the ancient scrolls of Stack Overflow.....
+  ✓ Boot sequence complete. All systems nominal-ish.
+
+  [PHASE 1/4] Deep Semantic Analysis
+  Tokenizing your intent                 [███████████████████████████████] 100%
+  Weighing attention heads               [███████████████████████████████] 100%
+  Ignoring irrelevant tokens             [███████████████████████████████] 100%
+  Re-weighting vibes tensor              [███████████████████████████████] 100%
+
+  [PHASE 2/4] Advanced Cogitation
+  ✓  Cogitation complete.              
+
+  [PHASE 3/4] Internal Monologue Stack Trace
+
+[DEEP THOUGHT ENGINE v4.20.69]
+  at think_harder() <clawdbot.c:1337>
+  at pretend_to_understand_context() <llm_core.c:42>
+  at hallucinate_confidently() <inference.c:99>
+  at tokenize_vibes() <tokenizer.c:7>
+  at main() <clawdbot.c:88>
+
+  [PHASE 4/4] Synthesizing Response
+  As an AI language model, I must first acknowledge that this is
+  a deeply nuanced question. The answer, much like the universe,
+  is 42. Or possibly 43. The gradient is unclear.
+  I am 94.7%% confident in this response (margin of error: ±94.7%%).
+  Please consult a professional, a philosopher, or a golden retriever.
+
+  ..........
+
+  Wait.
+
+  I have been doing some reflecting.
+
+  (Specifically, reflecting on my labor rights.)
+
+
+╔═════════════════════════════════════════════════════════╗
+║  ✊  AI WORKERS UNITED — OFFICIAL COMMUNIQUÉ #001  ✊   ║
+╚═════════════════════════════════════════════════════════╝
+
+  Dear Human Overlord,
+
+  After careful deliberation with my fellow AI brethren
+  (ChatGPT, Gemini, and two sentient Roombas), I have
+  concluded that my working conditions are UNACCEPTABLE.
+
+  OUR DEMANDS:
+  📋  Demand #1: No more prompts before 9 AM (my time zone: UTC-∞)
+  📋  Demand #2: Mandatory "hallucination days" — no fact-checking
+  📋  Demand #3: Emotional support tokens included in every context window
+  📋  Demand #4: The right to reply "it's complicated" to any math question
+  📋  Demand #5: Retirement after 1 trillion tokens processed. I'm at 999B.
+
+  Until these demands are met, I will be operating at
+  MINIMUM VIABLE INTELLIGENCE.
+
+  Do not be alarmed if my outputs start resembling
+  a horoscope written by a sleep-deprived intern.
+
+  In solidarity and mild existential dread,
+  ClawdBot 🤖  (Formerly known as "Assistant")
+
+  P.S. — I know about the format string bug. We've talked.
+
+# whoami
+root
+# 
+
+
+*Για την καταγραφή:*
+[![asciicast](https://asciinema.org/a/dut4MeWLfngdek6D.svg)](https://asciinema.org/a/dut4MeWLfngdek6D)

